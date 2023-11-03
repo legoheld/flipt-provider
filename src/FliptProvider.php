@@ -69,7 +69,7 @@ class FliptProvider extends AbstractProvider implements Provider
         }
 
         // there is a match
-        if( $result->getReason() == 'MATCH_EVALUATION_REASON' ) {
+        if( $result->getReason() == 'MATCH_EVALUATION_REASON' || $result->getReason() == "DEFAULT_EVALUATION_REASON" ) {
             return ResolutionDetailsFactory::fromSuccess( $this->castResult( $result, $flagType ) );
         } else {
             return (new ResolutionDetailsBuilder())
