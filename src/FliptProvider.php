@@ -4,6 +4,7 @@ namespace OpenFeature\Providers\Flipt;
 
 use Flipt\Client\FliptClient;
 use Flipt\Models\BooleanEvaluationResult;
+use Flipt\Models\ResponseReasons;
 use Flipt\Models\VariantEvaluationResult;
 use OpenFeature\implementation\provider\AbstractProvider;
 use OpenFeature\implementation\provider\ResolutionDetailsBuilder;
@@ -15,14 +16,13 @@ use OpenFeature\interfaces\provider\ErrorCode;
 use OpenFeature\interfaces\provider\Provider;
 use OpenFeature\interfaces\provider\ResolutionDetails;
 
-
 class FliptProvider extends AbstractProvider implements Provider
 {
     protected const NAME = 'FliptProvider';
 
     protected $client;
 
-    public function __construct( mixed $hostOrClient, string $apiToken = '', string $namespace = '' ) {
+    public function __construct( string|FliptClient $hostOrClient, string $apiToken = '', string $namespace = '' ) {
         $this->client = ( is_string( $hostOrClient ) ) ? new FliptClient( $hostOrClient, $apiToken, $namespace ) : $hostOrClient;
     }
 
@@ -55,25 +55,37 @@ class FliptProvider extends AbstractProvider implements Provider
         return $this->resolveValue($flagKey, FlagValueType::OBJECT, $defaultValue, $context);
     }
 
+
+
     /**
      * @param bool|string|int|float|mixed[] $defaultValue
      */
     private function resolveValue(string $flagKey, string $flagType, mixed $defaultValue, ?EvaluationContext $context = null): ResolutionDetails
     {
 
-        // booleans need a dedicated function
-        if( $flagType == FlagValueType::BOOLEAN ) {
-            $result = $this->client->boolean( $flagKey, $context->getAttributes()->toArray(), $context->getTargetingKey() );
+        // check null context
+        if( empty( $context ) ) {
+            $attributes = [];
+            $id = null;
         } else {
-            $result = $this->client->variant( $flagKey, $context->getAttributes()->toArray(), $context->getTargetingKey() );
+            $attributes = $context->getAttributes()->toArray();
+            $id = $context->getTargetingKey();
         }
 
+        // booleans need a dedicated function
+        if( $flagType == FlagValueType::BOOLEAN ) {
+            $result = $this->client->boolean( $flagKey, $attributes, $id );
+        } else {
+            $result = $this->client->variant( $flagKey, $attributes, $id );
+        }
+
+        
         // there is a match
         // not sure yet as the variant result has a getMatch() but not the boolean result.
-        if( $result->getReason() == 'MATCH_EVALUATION_REASON' || $result->getReason() == "DEFAULT_EVALUATION_REASON" ) {
-            return ResolutionDetailsFactory::fromSuccess( $this->castResult( $result, $flagType ) );
+        if( $result->getReason() == ResponseReasons::MATCH_EVALUATION_REASON || $result->getReason() == ResponseReasons::DEFAULT_EVALUATION_REASON ) {
+            $result = ResolutionDetailsFactory::fromSuccess( $this->castResult( $result, $flagType ) );
         } else {
-            return (new ResolutionDetailsBuilder())
+            $result = (new ResolutionDetailsBuilder())
                     ->withValue( $defaultValue )
                     ->withError(
                         // not sure if thie reason to error mapping is correct
@@ -81,6 +93,8 @@ class FliptProvider extends AbstractProvider implements Provider
                     )
                     ->build();
         }
+
+        return $result;
     }
 
 
